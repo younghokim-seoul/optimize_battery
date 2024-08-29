@@ -18,6 +18,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    OptimizeBattery.listenOptimizingBatteryEvent((isOptimized) {
+      print("listenOptimizingBatteryEvent is $isOptimized");
+    });
   }
 
   @override
@@ -45,15 +48,6 @@ class _MyAppState extends State<MyApp> {
                       });
                     }),
                 Text("Battery Optimization is $isBatterIgnoredText"),
-                const SizedBox(height: 20),
-
-                // Open battery optimization settings
-                ElevatedButton(
-                  child: const Text("Open Battery Optimisation Settings"),
-                  onPressed: () =>
-                      // Open battery optimization settings
-                      OptimizeBattery.openBatteryOptimizationSettings(),
-                ),
                 const SizedBox(height: 20),
 
                 //Disable battery optimization

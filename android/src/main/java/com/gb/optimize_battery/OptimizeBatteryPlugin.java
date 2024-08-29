@@ -87,6 +87,7 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
     @Override
     public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
         activity = binding.getActivity();
+        pluginBinding = binding;
         registerListeners();
     }
 
@@ -112,7 +113,6 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
     private void registerListeners() {
         if (pluginBinding != null) {
             pluginBinding.addActivityResultListener((requestCode, resultCode, data) -> {
-                Log.d("OptimizeBatteryPlugin", "onActivityResult: " + requestCode + " " + resultCode + " " + data);
                 if (requestCode == OPTIMIZATION_CODE) {
                     if (isIgnoringBatteryOptimizations()) {
                         channel.invokeMethod("BatteryOptimizationDenied", true);
