@@ -1,5 +1,7 @@
 package com.gb.optimize_battery;
 
+import static android.content.Context.POWER_SERVICE;
+
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -7,8 +9,10 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -18,18 +22,16 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 
-import static android.content.Context.POWER_SERVICE;
 
-
-/**
- * OptimizeBatteryPlugin
- */
 public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, ActivityAware {
-    /// The MethodChannel that will the communication between Flutter and native Android
 
+
+    private static final int OPTIMIZATION_CODE = 9090;
     private MethodChannel channel;
     private Context context;
     private Activity activity;
+    @Nullable private ActivityPluginBinding pluginBinding;
+
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -37,24 +39,12 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
         channel.setMethodCallHandler(this);
         //Set flutter context
         context = flutterPluginBinding.getApplicationContext();
+
     }
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
         switch (call.method) {
-            case "openBatteryOptimizationSettings":
-                Status status = openBatteryOptimizationSettings();
-                if (status == Status.NO_ACTIVITY) {
-                    result.error("NO_ACTIVITY", "Launching a setting requires a foreground activity.", null);
-                } else if (status == Status.ACTIVITY_NOT_FOUND) {
-                    result.error(
-                            "ACTIVITY_NOT_FOUND",
-                            "No Activity found to handle intent",
-                            null);
-                } else {
-                    result.success(true);
-                }
-                break;
             case "isIgnoringBatteryOptimizations":
                 boolean isIgnoring = isIgnoringBatteryOptimizations();
                 result.success(isIgnoring);
@@ -70,52 +60,22 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
     }
 
     Boolean stopOptimizingBatteryUsage() {
-        // return true if sdk version is below 23
-        if (android.os.Build.VERSION.SDK_INT < 23)
-            return true;
-
         try {
             Intent intent = new Intent();
             String packageName = context.getPackageName();
             intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
             intent.setData(Uri.parse("package:" + packageName));
-            activity.startActivity(intent);
-
+            activity.startActivityForResult(intent, OPTIMIZATION_CODE);
             return true;
-        }
-        catch (ActivityNotFoundException e) {
+        } catch (ActivityNotFoundException e) {
             return false;
         }
     }
 
     boolean isIgnoringBatteryOptimizations() {
-        // return true if sdk version is below 23
-        if (android.os.Build.VERSION.SDK_INT < 23)
-            return true;
         String packageName = context.getPackageName();
         PowerManager mPowerManager = (PowerManager) (context.getSystemService(POWER_SERVICE));
-
-        // ---- If ignore go to settings, else request ----
         return mPowerManager.isIgnoringBatteryOptimizations(packageName);
-    }
-
-    Status openBatteryOptimizationSettings() {
-        // return OK if sdk version is below 23
-        if (android.os.Build.VERSION.SDK_INT < 23)
-            return Status.OK;
-
-        if (activity == null) {
-            return Status.NO_ACTIVITY;
-        }
-        Intent intent = new Intent();
-        intent.setAction(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-        try {
-            activity.startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-          // if exception is thrown, then no activity is found to handle intent
-            return Status.ACTIVITY_NOT_FOUND;
-        }
-        return Status.OK;
     }
 
     //Activity aware methods
@@ -127,7 +87,9 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
     @Override
     public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
         activity = binding.getActivity();
+        registerListeners();
     }
+
 
     @Override
     public void onDetachedFromActivityForConfigChanges() {
@@ -141,22 +103,33 @@ public class OptimizeBatteryPlugin implements FlutterPlugin, MethodCallHandler, 
 
     @Override
     public void onDetachedFromActivity() {
+        if (pluginBinding != null) {
+            pluginBinding = null;
+        }
         activity = null;
     }
+
+    private void registerListeners() {
+        if (pluginBinding != null) {
+            pluginBinding.addActivityResultListener((requestCode, resultCode, data) -> {
+                Log.d("OptimizeBatteryPlugin", "onActivityResult: " + requestCode + " " + resultCode + " " + data);
+                if (requestCode == OPTIMIZATION_CODE) {
+                    if (isIgnoringBatteryOptimizations()) {
+                        channel.invokeMethod("BatteryOptimizationDenied", true);
+                    } else {
+                        channel.invokeMethod("BatteryOptimizationDenied", false);
+                    }
+                    return true;
+                }
+                return false;
+            });
+        }
+    }
+
 }
 
 enum Status {
-    /**
-     * The intent was well formed.
-     */
     OK,
-    /**
-     * No activity was found .
-     */
     NO_ACTIVITY,
-    /**
-     * No Activity found that can handle given intent.
-     */
     ACTIVITY_NOT_FOUND,
 }
-
